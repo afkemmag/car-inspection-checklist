@@ -5,6 +5,8 @@ interface Props {
   title: string;
 }
 const { title } = Astro.props;
+// Base-aware paths so the same build works at a domain root or a GitHub Pages project path.
+const base = import.meta.env.BASE_URL.replace(/\/?$/, '/');
 ---
 <!doctype html>
 <html lang="en">
@@ -22,12 +24,21 @@ const { title } = Astro.props;
       } catch (e) {}
     </script>
     <meta name="description" content="Pre-purchase used car inspection checklist. Saved on this device." />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="icon" type="image/svg+xml" href={`${base}favicon.svg`} />
+    <link rel="manifest" href={`${base}manifest.webmanifest`} />
+    <link rel="apple-touch-icon" href={`${base}apple-touch-icon.png`} />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black" />
+    <meta name="apple-mobile-web-app-title" content="Touge Inspect" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" crossorigin />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <!-- crossorigin: CORS responses let the service worker cache fonts for offline use
+         (no-cors would give opaque, padded cache entries). -->
     <link
       href="https://fonts.googleapis.com/css2?family=Chakra+Petch:ital,wght@0,500;0,700;1,700&family=Dela+Gothic+One&family=Zen+Kaku+Gothic+New:wght@400;500;700&display=swap"
       rel="stylesheet"
+      crossorigin
     />
     <title>{title}</title>
   </head>

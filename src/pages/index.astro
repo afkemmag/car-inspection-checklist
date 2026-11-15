@@ -100,6 +100,18 @@ const track = arc(start, start + sweep, r + 8);
       </div>
     </div>
     <p class="garage-summary" id="vehicleSummary"></p>
+    <div class="backup" id="backup" data-state="none" hidden>
+      <span class="backup-dot" aria-hidden="true"></span>
+      <p class="backup-text" id="backupText"></p>
+      <button type="button" class="backup-btn" id="backupExport">Export backup</button>
+    </div>
+    <div class="install-hint" id="installHint" role="note" hidden>
+      <p>
+        <strong>Keep this on iPhone:</strong> tap Share → <em>Add to Home Screen</em>.
+        Safari can clear saved data for sites you haven't opened in 7 days; the home-screen app keeps it, and opens offline.
+      </p>
+      <button type="button" class="backup-btn" id="installDismiss">Got it</button>
+    </div>
   </section>
 
   <nav class="filters" aria-label="Filters">

@@ -362,6 +362,33 @@ select:focus, input:focus, textarea:focus { border-color: var(--red); outline: n
 .garage-summary { margin: 0.5rem 0 0; font-family: var(--font-dash); font-size: 0.85rem; color: var(--fg-muted); overflow-wrap: anywhere; }
 .garage-select select { text-overflow: ellipsis; }
 
+/* Backup status — quiet when you're covered, yellow once unbacked work is days old. */
+.backup {
+  margin-top: 0.6rem; display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem 0.6rem;
+  font-family: var(--font-dash); font-size: 0.85rem; color: var(--fg-muted);
+}
+.backup-text { margin: 0; }
+.backup-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--fg-faint); flex-shrink: 0; }
+.backup[data-state='ok'] .backup-dot { background: var(--ok); }
+.backup[data-state='stale'] .backup-dot { background: var(--warn); }
+.backup[data-state='stale'] .backup-text { color: var(--fg); }
+.backup-btn {
+  min-height: 32px; padding: 0 0.6rem; border-radius: var(--radius);
+  background: none; border: 1px solid var(--border); color: var(--fg);
+  font-family: var(--font-dash); font-weight: 700; font-size: 0.75rem; letter-spacing: 0.05em; text-transform: uppercase;
+}
+.backup[data-state='stale'] .backup-btn { border-color: var(--warn); }
+@media (hover: hover) { .backup-btn:hover { border-color: var(--fg); } }
+@media (pointer: coarse) { .backup-btn { min-height: 44px; padding: 0 0.85rem; } }
+
+.install-hint {
+  margin-top: 0.75rem; padding: 0.75rem 0.9rem; display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem 1rem;
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+  font-size: 0.9rem;
+}
+.install-hint p { margin: 0; flex: 1 1 24ch; }
+.install-hint strong { color: var(--fg); }
+
 .btn {
   display: inline-flex; align-items: center; gap: 0.35rem;
   padding: 0.55rem 1rem; border-radius: var(--radius);
@@ -690,6 +717,7 @@ html:not(.ready) .item-controls, html:not(.ready) .dash { opacity: 0.4; }
   @page { margin: 12mm; }
   body { background: #fff; color: #000; font-size: 11pt; }
   .speedlines, .skip-link, .filters, .footer, .garage-actions, .collapse, .toast, .hero::after,
+  .mode-switch, .backup, .install-hint,
   .item-note, .empty { display: none !important; }
 
   /* Print the whole checklist, whatever the on-screen filters or collapsed state. */

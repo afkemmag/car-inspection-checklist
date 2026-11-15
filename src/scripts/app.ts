@@ -1,3 +1,4 @@
+/// <reference types="astro/client" />
 // Client-side state for the inspection checklist. Everything is persisted in localStorage.
 
 type Status = 'ok' | 'ng' | 'na';
@@ -171,6 +172,7 @@ const active = () => state.vehicles[state.activeId];
 function touch(v: Vehicle = active()) {
   v.updatedAt = Date.now();
   save();
+  renderBackup();
 }
 
 // ---------- DOM refs ----------
@@ -366,6 +368,7 @@ function renderAll() {
   renderItems();
   renderStats();
   renderFilters();
+  renderBackup();
 }
 
 // ---------- events ----------
@@ -379,6 +382,7 @@ function setStatus(itemId: string, s: Status) {
   renderItems();
   renderStats();
   buzz(next.s, itemId);
+  requestPersist();
   // Keep the item visible briefly if it now falls outside the status filter, then re-filter.
   if (state.ui.status !== 'all') window.setTimeout(refilterKeepingFocus, 450);
 }
@@ -613,7 +617,7 @@ form.addEventListener('submit', () => {
 });
 
 // Export / import
-$('#exportBtn').addEventListener('click', () => {
+function exportBackup() {
   flushNote();
   const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
   const a = document.createElement('a');
@@ -626,7 +630,90 @@ $('#exportBtn').addEventListener('click', () => {
   a.remove();
   // Revoking synchronously can cancel the download in some browsers.
   window.setTimeout(() => URL.revokeObjectURL(a.href), 10_000);
+  writePref(BACKUP_KEY, String(Date.now()));
+  renderBackup();
+}
+$('#exportBtn').addEventListener('click', exportBackup);
+$('#backupExport').addEventListener('click', exportBackup);
+
+// ---------- durability: backup status, persistent storage, iOS install hint ----------
+// localStorage is the only copy. Browsers may evict it (Safari: after 7 days without a
+// visit, unless installed to the Home Screen), so make the backup state visible and
+// one tap away, and ask for persistent storage once there's something worth keeping.
+
+const BACKUP_KEY = 'touge-inspect:backup';
+const IOS_HINT_KEY = 'touge-inspect:ios-hint';
+const STALE_MS = 3 * 24 * 60 * 60 * 1000; // well inside Safari's 7-day window
+const rtf = new Intl.RelativeTimeFormat('en', { numeric: 'auto' });
+
+function readPref(key: string) {
+  try { return localStorage.getItem(key); } catch { return null; }
+}
+function writePref(key: string, value: string) {
+  try { localStorage.setItem(key, value); } catch { /* storage blocked: footer already warns */ }
+}
+
+function ago(ts: number) {
+  const s = (ts - Date.now()) / 1000;
+  const units: [Intl.RelativeTimeFormatUnit, number][] = [['day', 86400], ['hour', 3600], ['minute', 60]];
+  for (const [unit, sec] of units) if (Math.abs(s) >= sec) return rtf.format(Math.round(s / sec), unit);
+  return 'just now';
+}
+
+const vehiclesWithData = () =>
+  Object.values(state.vehicles).filter((v) => Object.keys(v.items).length || Object.values(v.info).some((x) => x.trim()));
+
+function renderBackup() {
+  const box = document.getElementById('backup');
+  if (!box) return;
+  const withData = vehiclesWithData();
+  box.hidden = withData.length === 0;
+  renderInstallHint(withData.length > 0);
+  if (!withData.length) return;
+
+  const now = Date.now();
+  const last = Number(readPref(BACKUP_KEY)) || 0;
+  const latestChange = Math.max(...withData.map((v) => v.updatedAt));
+  const oldestUnsaved = last ? last : Math.min(...withData.map((v) => v.createdAt));
+  let st: 'none' | 'ok' | 'stale';
+  let text: string;
+  if (last && latestChange <= last) {
+    st = 'ok';
+    text = `Backed up ${ago(last)}.`;
+  } else {
+    st = now - oldestUnsaved > STALE_MS ? 'stale' : 'none';
+    text = last ? `Changes since your last backup (${ago(last)}).` : 'Not backed up yet — this device holds the only copy.';
+  }
+  box.dataset.state = st;
+  $('#backupText').textContent = text;
+}
+
+const isIOS = /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+const isStandalone = () =>
+  (navigator as Navigator & { standalone?: boolean }).standalone === true || window.matchMedia('(display-mode: standalone)').matches;
+
+function renderInstallHint(hasData: boolean) {
+  const hint = document.getElementById('installHint');
+  if (hint) hint.hidden = !(isIOS && !isStandalone() && hasData && readPref(IOS_HINT_KEY) !== 'dismissed');
+}
+$('#installDismiss').addEventListener('click', () => {
+  writePref(IOS_HINT_KEY, 'dismissed');
+  renderInstallHint(false);
+  $('#backupExport').focus();
 });
+
+let persistAsked = false;
+/** Ask once per session, from a user gesture (Firefox shows a prompt). */
+function requestPersist() {
+  if (persistAsked || !navigator.storage?.persist) return;
+  persistAsked = true;
+  navigator.storage.persisted().then((already) => (already ? true : navigator.storage.persist())).catch(() => {});
+}
+
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') renderBackup(); // refresh "3 days ago"
+});
+window.addEventListener('offline', () => toast('Offline — everything still saves on this device.'));
 
 const importInput = $<HTMLInputElement>('#importInput');
 $('#importBtn').addEventListener('click', () => importInput.click());
@@ -706,3 +793,13 @@ window.addEventListener('storage', (e) => {
 save();
 renderAll();
 document.documentElement.classList.add('ready');
+
+// Offline support (production builds only — the dev server's modules aren't cacheable).
+if ('serviceWorker' in navigator && import.meta.env.PROD) {
+  const base = import.meta.env.BASE_URL.replace(/\/?$/, '/');
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register(`${base}sw.js`, { scope: base }).catch(() => {
+      /* not fatal: the app still works online */
+    });
+  });
+}
