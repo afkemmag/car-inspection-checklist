@@ -1,0 +1,238 @@
+---
+import Layout from '../layouts/Layout.astro';
+import { sections, totalItems } from '../data/checklist';
+
+// Tachometer geometry: 270° sweep, 0–10 "×1000 rpm" marks = 0–100% inspected.
+const cx = 120, cy = 120, r = 92;
+const start = -225; // degrees, measured from 3 o'clock
+const sweep = 270;
+const polar = (deg: number, radius: number) => {
+  const rad = (deg * Math.PI) / 180;
+  return [cx + radius * Math.cos(rad), cy + radius * Math.sin(rad)];
+};
+const arc = (from: number, to: number, radius: number) => {
+  const [x1, y1] = polar(from, radius);
+  const [x2, y2] = polar(to, radius);
+  const large = to - from > 180 ? 1 : 0;
+  return `M ${x1} ${y1} A ${radius} ${radius} 0 ${large} 1 ${x2} ${y2}`;
+};
+const ticks = Array.from({ length: 41 }, (_, i) => {
+  const deg = start + (sweep * i) / 40;
+  const major = i % 4 === 0;
+  const [x1, y1] = polar(deg, r - (major ? 16 : 9));
+  const [x2, y2] = polar(deg, r - 2);
+  return { x1, y1, x2, y2, major, red: i >= 32 };
+});
+const labels = Array.from({ length: 11 }, (_, i) => {
+  const [x, y] = polar(start + (sweep * i) / 10, r - 30);
+  return { x, y, n: i };
+});
+const redline = arc(start + sweep * 0.8, start + sweep, r - 4);
+const track = arc(start, start + sweep, r + 8);
+---
+<Layout title="峠 Touge Inspect — Used Car Checklist">
+  <a class="skip-link" href="#checklist">Skip to checklist</a>
+  <div class="speedlines" aria-hidden="true"></div>
+
+  <header class="hero">
+    <div class="mode-switch" role="group" aria-label="Display mode">
+      <button type="button" data-mode="night" aria-pressed="true"><span><span class="jp" lang="ja" aria-hidden="true">夜</span> Night</span></button>
+      <button type="button" data-mode="day" aria-pressed="false"><span><span class="jp" lang="ja" aria-hidden="true">昼</span> Day</span></button>
+    </div>
+    <div class="hero-brand">
+      <span class="hero-kanji" aria-hidden="true">峠</span>
+      <div>
+        <p class="eyebrow"><span class="wakaba" aria-hidden="true"></span><span lang="ja" aria-hidden="true">中古車点検 · </span>Pre-purchase inspection</p>
+        <h1>TOUGE<em>INSPECT</em></h1>
+        <p class="tagline">Check it like you're about to send it down the mountain.</p>
+      </div>
+    </div>
+
+    <div class="dash">
+      <figure class="tach">
+        <svg viewBox="0 0 240 240" aria-hidden="true" focusable="false">
+          <circle cx={cx} cy={cy} r={r + 14} class="tach-bezel" />
+          <path d={track} class="tach-track" />
+          <path d={track} class="tach-fill" id="tachFill" pathLength="100" />
+          <path d={redline} class="tach-red" />
+          {ticks.map((t) => (
+            <line x1={t.x1} y1={t.y1} x2={t.x2} y2={t.y2} class:list={['tick', { major: t.major, red: t.red }]} />
+          ))}
+          {labels.map((l) => (
+            <text x={l.x} y={l.y} class:list={['tick-label', { red: l.n >= 8 }]}>{l.n}</text>
+          ))}
+          <text x={cx} y={cy + 52} class="tach-unit">×10 %</text>
+          <g id="tachNeedle" style={`transform: rotate(${start + 90}deg)`}>
+            <line x1={cx} y1={cy + 14} x2={cx} y2={cy - r + 12} class="needle" />
+          </g>
+          <circle cx={cx} cy={cy} r="11" class="hub" />
+        </svg>
+        <figcaption>
+          <span class="visually-hidden">Inspection progress: </span><span class="digital" id="pctReadout">0</span><span class="digital-unit">%</span>
+          <span class="digital-sub"><span id="doneCount">0</span>/{totalItems} checked</span>
+        </figcaption>
+      </figure>
+
+      <div class="dash-side">
+        <div class="verdict" id="verdict" data-state="idle" role="status" aria-live="polite" aria-atomic="true">
+          <span class="verdict-jp" id="verdictJp" lang="ja" aria-hidden="true">点検中</span>
+          <span class="verdict-en" id="verdictEn">In progress</span>
+        </div>
+        <dl class="stats">
+          <div class="stat ok"><dt><span aria-hidden="true">○ </span>OK</dt><dd id="countOk">0</dd></div>
+          <div class="stat ng"><dt><span aria-hidden="true">× </span>NG<span class="visually-hidden"> (problems)</span></dt><dd id="countNg">0</dd></div>
+          <div class="stat na"><dt><span aria-hidden="true">— </span>N/A</dt><dd id="countNa">0</dd></div>
+          <div class="stat crit"><dt><span lang="ja" aria-hidden="true">要注意 </span><span class="visually-hidden">Deal-breaker </span>NG</dt><dd id="countCrit">0</dd></div>
+        </dl>
+      </div>
+    </div>
+  </header>
+
+  <section class="garage" aria-label="Vehicle">
+    <div class="garage-row">
+      <label class="garage-select">
+        <span class="label"><span lang="ja" aria-hidden="true">車両 </span>Vehicle</span>
+        <select id="vehicleSelect"></select>
+      </label>
+      <div class="garage-actions">
+        <button type="button" class="btn" id="editVehicle">Edit details</button>
+        <button type="button" class="btn btn-red" id="newVehicle">＋ New car</button>
+      </div>
+    </div>
+    <p class="garage-summary" id="vehicleSummary"></p>
+  </section>
+
+  <nav class="filters" aria-label="Filters">
+    <div class="filters-top">
+    <div class="chips" role="group" aria-label="Sections">
+      <button type="button" class="chip" data-section-filter="all" aria-pressed="true">
+        <span class="chip-jp" lang="ja" aria-hidden="true">全部</span><span class="chip-en">All</span>
+      </button>
+      {sections.map((s) => (
+        <button type="button" class="chip" data-section-filter={s.id} aria-pressed="false">
+          <span class="chip-jp" lang="ja" aria-hidden="true">{s.jp}</span>
+          <span class="chip-en">{s.title}</span>
+          <span class="chip-count"><span class="visually-hidden">, </span><span data-chip-count={s.id}>0/{s.items.length}</span><span class="visually-hidden"> done</span></span>
+        </button>
+      ))}
+    </div>
+      <button type="button" class="filter-toggle" id="filterToggle" aria-expanded="false" aria-controls="filterRow">
+        <span>Filter</span><span class="filter-count" id="filterCount" hidden></span>
+      </button>
+    </div>
+    <div class="filter-row" id="filterRow">
+      <div class="segmented" role="group" aria-label="Status">
+        <button type="button" data-status-filter="all" aria-pressed="true">All</button>
+        <button type="button" data-status-filter="todo" aria-pressed="false">To do</button>
+        <button type="button" data-status-filter="ok" aria-pressed="false"><span aria-hidden="true">○ </span>OK</button>
+        <button type="button" data-status-filter="ng" aria-pressed="false"><span aria-hidden="true">× </span>NG</button>
+        <button type="button" data-status-filter="na" aria-pressed="false"><span aria-hidden="true">— </span>N/A</button>
+      </div>
+      <label class="toggle">
+        <input type="checkbox" id="criticalOnly" />
+        <span><span lang="ja" aria-hidden="true">要注意 </span><span class="long">Deal-breakers </span>only</span>
+      </label>
+      <label class="search">
+        <span class="visually-hidden">Search checklist</span>
+        <input type="search" id="searchInput" placeholder="Search… e.g. rust, oil, clutch" autocomplete="off" maxlength="100" enterkeyhint="search" />
+      </label>
+    </div>
+  </nav>
+
+  <main class="sections" id="checklist" tabindex="-1">
+    {sections.map((s, si) => (
+      <section class="section" data-section={s.id} id={`sec-${s.id}`}>
+        <header class="section-head">
+          <span class="section-num">{String(si + 1).padStart(2, '0')}</span>
+          <span class="section-jp" aria-hidden="true">{s.jp}</span>
+          <div class="section-title">
+            <h2>{s.title} <small>{s.romaji}</small></h2>
+            <p>{s.when}</p>
+            <div class="section-bar"><span data-section-bar={s.id}></span></div>
+          </div>
+          <button type="button" class="collapse" data-collapse={s.id} aria-expanded="true" aria-controls={`list-${s.id}`}>
+            <span class="visually-hidden">{s.title} items</span>
+          </button>
+        </header>
+        <ol class="items" id={`list-${s.id}`}>
+          {s.items.map((it) => (
+            <li
+              class="item"
+              data-item={it.id}
+              data-section-id={s.id}
+              data-critical={it.critical ? 'true' : 'false'}
+              data-text={`${it.title} ${it.hint} ${s.title}`.toLowerCase()}
+              data-status=""
+            >
+              <div class="item-main">
+                <div class="item-text">
+                  <h3>
+                    {it.critical && (
+                      <span class="badge" title="Likely deal-breaker if it fails"><span lang="ja" aria-hidden="true">要注意</span><span class="visually-hidden">Deal-breaker:</span></span>
+                    )}
+                    {it.title}
+                  </h3>
+                  <p>{it.hint}</p>
+                </div>
+                <div class="item-controls" role="group" aria-label={`Result for ${it.title}`}>
+                  <button type="button" class="st st-ok" data-set="ok" aria-pressed="false" aria-label="OK" title="OK"><span aria-hidden="true">○</span></button>
+                  <button type="button" class="st st-ng" data-set="ng" aria-pressed="false" aria-label="Problem" title="Problem (NG)"><span aria-hidden="true">×</span></button>
+                  <button type="button" class="st st-na" data-set="na" aria-pressed="false" aria-label="Not applicable" title="Not applicable"><span aria-hidden="true">—</span></button>
+                  <button type="button" class="st st-note" data-note-toggle aria-expanded="false" aria-controls={`note-${it.id}`} aria-label="Note" title="Note"><span aria-hidden="true">✎</span></button>
+                </div>
+              </div>
+              <div class="item-note" id={`note-${it.id}`} hidden>
+                <textarea rows="2" maxlength="2000" aria-label={`Note: ${it.title}`} placeholder="What you saw, repair quote, photo reference…" data-note></textarea>
+              </div>
+              <p class="note-print" data-note-print></p>
+            </li>
+          ))}
+        </ol>
+      </section>
+    ))}
+    <div class="empty" id="emptyState" tabindex="-1" hidden>
+      <p><span lang="ja" aria-hidden="true">何もない — </span>No items match these filters.</p>
+      <button type="button" class="btn" id="clearFilters">Clear filters</button>
+    </div>
+  </main>
+
+  <footer class="footer">
+    <div class="footer-actions">
+      <button type="button" class="btn" id="exportBtn">Export JSON</button>
+      <button type="button" class="btn" id="importBtn">Import JSON</button>
+      <input type="file" id="importInput" accept="application/json,.json" hidden />
+      <button type="button" class="btn" id="printBtn">Print</button>
+      <button type="button" class="btn btn-ghost" id="resetBtn">Reset this car</button>
+      <button type="button" class="btn btn-ghost" id="deleteBtn">Delete this car</button>
+    </div>
+    <p class="footer-note" id="footerNote" role="status">Saved automatically in this browser (localStorage). Nothing leaves your device. Not a substitute for a professional pre-purchase inspection.</p>
+  </footer>
+
+  <dialog id="vehicleDialog" class="dialog" aria-labelledby="vehicleDialogTitle">
+    <form method="dialog" id="vehicleForm">
+      <h2 id="vehicleDialogTitle"><span lang="ja" aria-hidden="true">車両情報 </span><small>Vehicle details</small></h2>
+      <div class="form-grid">
+        <label>Nickname<input name="name" maxlength="80" autocomplete="off" placeholder="e.g. Silver S14 on Main St" /></label>
+        <label>Year<input name="year" inputmode="numeric" maxlength="4" pattern="(19|20)[0-9]{2}" title="Four-digit year, e.g. 1998" placeholder="1998" /></label>
+        <label>Make<input name="make" maxlength="40" placeholder="Nissan" /></label>
+        <label>Model / trim<input name="model" maxlength="60" placeholder="240SX SE" /></label>
+        <label>VIN<input name="vin" placeholder="17 characters" maxlength="17" autocapitalize="characters" autocomplete="off" spellcheck="false" /></label>
+        <label>Mileage<input name="mileage" inputmode="numeric" maxlength="12" placeholder="128,000" /></label>
+        <label>Asking price<input name="price" maxlength="20" placeholder="$9,500" /></label>
+        <label>Seller / contact<input name="seller" maxlength="120" placeholder="Name, phone, dealer" /></label>
+        <label class="full">Location<input name="location" maxlength="120" placeholder="Where you saw it" /></label>
+        <label class="full">Notes<textarea name="notes" rows="3" maxlength="2000" placeholder="General impressions, things to ask"></textarea></label>
+      </div>
+      <div class="dialog-actions">
+        <button type="button" class="btn btn-ghost" value="cancel" id="vehicleCancel">Cancel</button>
+        <button type="submit" class="btn btn-red" value="save">Save</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <script>
+    import '../scripts/app.ts';
+  </script>
+</Layout>
